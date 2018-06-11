@@ -1,74 +1,96 @@
 package kli
 
-data class CliArg(
-    val name: String,
-    val requiresValue: Boolean = true,
-    val short: String? = null,
-    val description: String? = null
-) {
-    val longFlag: String = "--$name"
-    val shortFlag: String? = if (short == null) null else "-$short"
+import kotlin.reflect.KProperty
+
+
+
+class FlagDelegate(arg: OptionalArgument) {
+    operator fun getValue(kli: Kli?, property: KProperty<*>): Int {
+
+    }
 }
 
-data class CliResult(
-    val positional: List<String>,
-    val optional: Map<String, String?>
-)
+class PosDelegate(arg: PositionalArgument) {
+    operator fun getValue(kli: Kli?, property: KProperty<*>): String {
 
-class CliParseException(message: String): Exception(message)
+    }
+}
 
-fun buildCli(vararg args: CliArg): Kli = Kli(args.toList())
+class MapDelegate<T>(private val delegate: ArgumentDelegate, private val transform: (String) -> T) {
+    operator fun getValue(kli: Kli?, property: KProperty<*>): T =
+        transform(delegate.getValue(kli, property))
+}
 
-class Kli(val options: List<CliArg>) {
-    private val map: Map<String, CliArg> = kotlin.run {
-        val map = HashMap<String, CliArg>()
-        for (opt in options) {
-            val existing = map[opt.longFlag] ?: map[opt.shortFlag]
-            if(existing != null) {
-                throw IllegalArgumentException("Conflict between $opt and $existing")
-            } else {
-                map[opt.longFlag] = opt
-                if(opt.shortFlag != null) {
-                    map[opt.shortFlag] = opt
-                }
-            }
-        }
-        map
+class ArgumentDelegate(arg: OptionalArgument) {
+    operator fun getValue(_: Kli?, property: KProperty<*>): String {
+
     }
 
-    fun parse(args: Array<String>): CliResult {
-        val pos = ArrayList<String>()
-        val opt = HashMap<String, String?>()
+    infix fun <T> mappedTo(transform: (String) -> T): MapDelegate<T> =
+        MapDelegate(this, transform)
+}
 
-        var awaitingValue = false
-        var awaitingFor = ""
-        for(arg in args) {
-            if(awaitingValue) {
-                require(awaitingFor.isNotEmpty())
-                opt[awaitingFor] = arg
-                awaitingValue = false
-                awaitingFor= ""
-            } else if(arg.startsWith("-")) {
-                val flag = map[arg]
-                if(flag == null) {
-                    throw CliParseException("Unknown arg $arg")
-                } else {
-                    if(!flag.requiresValue) {
-                        opt[flag.name] = null
-                    } else {
-                        awaitingValue = true
-                        awaitingFor = flag.name
-                    }
-                }
-            } else {
-                pos += arg
-            }
+
+class PositionalArgument(
+    val name: String,
+    val help: String
+)
+
+class OptionalArgument(
+    val flags: List<String>,
+    val message: String,
+    val requiresValue: Boolean
+)
+
+
+private val validFlag = Regex("^-{1,2}[a-zA-Z0-9-_]+")
+
+private fun parseFlagString(s: String): List<String> {
+    return s.split("|").map {
+        it.trim().also {
+            require(it.matches(validFlag)) { "Illegal flag name $it" }
         }
+    }
+}
 
-        if(awaitingValue) {
-            throw CliParseException("Expecting value for $awaitingFor")
-        }
+class Kli {
 
-        return CliResult(pos, opt)
+    private val pos = ArrayList<PositionalArgument>()
+    private val args = ArrayList<OptionalArgument>()
+    private val maps = HashMap<String, OptionalArgument>()
+
+    private fun addArgument(arg: OptionalArgument) {
+        args += arg
+        arg.flags.associateTo(maps) { it to arg }
+    }
+
+    fun flag(flags: String, help: String = ""): FlagDelegate {
+        val arg = OptionalArgument(
+            flags = parseFlagString(flags),
+            message = help,
+            requiresValue = false
+        )
+        addArgument(arg)
+        return FlagDelegate(arg)
+    }
+
+    fun optional(flags: String, help: String): ArgumentDelegate {
+        val arg = OptionalArgument(
+            flags = parseFlagString(flags),
+            message = help,
+            requiresValue = true
+        )
+        addArgument(arg)
+        return ArgumentDelegate(arg)
+    }
+
+    fun positional(name: String, help: String): PosDelegate {
+        val arg = PositionalArgument(name, help)
+        pos += arg
+        return PosDelegate(arg)
+    }
+
+    fun parse(args: Array<String>) {
+
     }
 }
