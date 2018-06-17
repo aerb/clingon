@@ -13,6 +13,9 @@ class OptionDefinition(
 
 private val validFlag = Regex("^-{1,2}[a-zA-Z0-9-_?]+")
 
+internal fun MatchGroupCollection.requiredGroup(i: Int): String =
+    this[i]?.value ?: throw IllegalStateException("Expected group of index $i.")
+
 private fun parseFlagString(s: String): List<String> =
     s.split("|").map {
         it.trim().also {
@@ -48,91 +51,30 @@ class Clingon {
         return delegate
     }
 
-    private val argumentPattern = Regex("^((-{1,2})[a-zA-Z0-9-_?]+)(=(.*))?", RegexOption.MULTILINE)
-
-    enum class ParserState {
-        Initial,
-        PendingValue
-    }
-
-    private fun parseMultiChar(name: String, value: String?) {
-        val holder = options[name] ?: throw IllegalArgumentException("Unknown arg $name")
-        if(holder.arg.takesArg) {
-            if (value != null) {
-                holder.delegate.setValue(value)
-                waitingForValue = null
-                parserState = ParserState.Initial
-            } else {
-                waitingForValue = holder
-                parserState = ParserState.PendingValue
-            }
-        } else {
-            holder.delegate.setValue("")
-        }
-    }
-
-    private fun parseSingleChar(name: String) {
-        var i = 1
-        while(i < name.length) {
-            val c = "-${name[i]}"
-            val holder = options[c] ?: throw IllegalArgumentException("Unknown arg $c")
-            if(holder.arg.takesArg) {
-                if(i == name.lastIndex) {
-                    waitingForValue = holder
-                    parserState = ParserState.PendingValue
-                    return
-                } else {
-                    val j = i + 1
-                    val value =
-                        if(name[j] == '=') {
-                            if(j + 1 < name.length) name.substring(j + 1)
-                            else ""
-                        } else name.substring(j)
-                    holder.delegate.setValue(value)
-                }
-                return
-            } else {
-                holder.delegate.setValue("")
-            }
-            i++
-        }
-    }
-
-    private var parserState = ParserState.Initial
-    private var waitingForValue: COpt? = null
     private var positionIndex = 0
 
     fun parse(args: Array<String>) {
-        for(arg in args) {
-            when(parserState) {
-                ParserState.Initial -> {
-                    val match = argumentPattern.matchEntire(arg)?.groups
-                    if(match != null) {
-                        val fullMatch = checkNotNull(match[0]?.value) { "Missed required" }
-                        val name = checkNotNull(match[1]?.value) { "Missed required" }
-                        val dash = checkNotNull(match[2]?.value) { "Missed required" }
-                        val value = match[4]?.value
-                        when (dash.length) {
-                            1 -> parseSingleChar(fullMatch)
-                            2 -> parseMultiChar(name, value)
-                            else -> throw IllegalArgumentException("Invalid flag $arg")
-                        }
+        val tokenizer = CliTokenizer(args)
+
+        while(tokenizer.hasNext()) {
+            val next = tokenizer.nextType()
+            when(next) {
+                Token.ShortFlag, Token.Flag -> {
+                    val flag = if(next == Token.ShortFlag) "-${tokenizer.readShortFlag()}" else "--${tokenizer.readFlag()}"
+                    val option = options[flag] ?: throw IllegalArgumentException("Unknown flag $flag")
+                    if(option.arg.takesArg) {
+                        if(!tokenizer.hasNext()) throw IllegalArgumentException("Argument required for $flag")
+                        option.delegate.setValue(tokenizer.readOptionArgument())
                     } else {
-                        if(arg.isNotEmpty()) {
-                            positions[positionIndex++].delegate.setValue(arg)
-                        }
+                        option.delegate.setValue("")
                     }
                 }
-                ParserState.PendingValue -> {
-                    val holder = checkNotNull(waitingForValue) { "Waiting value not set" }
-                    holder.delegate.setValue(arg)
-                    parserState = ParserState.Initial
-                    waitingForValue = null
+                Token.Positional -> {
+                    positions[positionIndex++].delegate.setValue(tokenizer.readPositional())
                 }
+                else -> throw IllegalStateException("Unexpected $next")
             }
         }
-
-        check(parserState != ParserState.PendingValue) { "Missing value for ${waitingForValue?.arg?.flags}" }
 
         options.values.forEach { it.delegate.onParseDone() }
         positions.forEach { it.delegate.onParseDone() }

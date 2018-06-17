@@ -6,7 +6,7 @@ import kotlin.test.*
 class ClingonTests {
     private val whitespace = Regex("\\s+")
     private fun String.toArgArray(): Array<String> =
-        split(whitespace).toTypedArray()
+        if(isEmpty()) emptyArray() else split(whitespace).toTypedArray()
 
     @Test
     fun complex() {
