@@ -1,15 +1,14 @@
 package kli
 
-
-class PositionalArgument(
+class PositionalDefinition(
     val name: String,
     val help: String
 )
 
-class OptionArgument(
+class OptionDefinition(
     val flags: List<String>,
     val help: String,
-    val requiresValue: Boolean
+    val takesArg: Boolean
 )
 
 private val validFlag = Regex("^-{1,2}[a-zA-Z0-9-_?]+")
@@ -22,42 +21,29 @@ private fun parseFlagString(s: String): List<String> =
     }
 
 class Clingon {
-    data class CPos(val arg: PositionalArgument, val delegate: StringDelegate)
-    private sealed class COpt {
-        abstract val arg: OptionArgument
-        abstract val delegate: ParserLifecycle
-        data class Arg(override val arg: OptionArgument, override val delegate: StringDelegate): COpt()
-        data class NoArg(override val arg: OptionArgument, override val delegate: BoolDelegate): COpt()
-    }
+    data class CPos(val arg: PositionalDefinition, val delegate: StringDelegate)
+    data class COpt(val arg: OptionDefinition, val delegate: SimpleDelegate<String, *>)
 
     private val positions = ArrayList<CPos>()
     private val options = HashMap<String, COpt>()
 
     fun flag(flags: String, help: String = ""): BoolDelegate {
         val delegate = BoolDelegate()
-        val argument = OptionArgument(
-            flags = parseFlagString(flags),
-            help = help,
-            requiresValue = false
-        )
-        argument.flags.associateTo(options) { it to COpt.NoArg(argument, delegate) }
+        val argument = OptionDefinition(parseFlagString(flags), help, takesArg = false)
+        argument.flags.associateTo(options) { it to COpt(argument, delegate) }
         return delegate
     }
 
     fun option(flags: String, help: String = ""): StringDelegate {
         val delegate = StringDelegate()
-        val argument = OptionArgument(
-            flags = parseFlagString(flags),
-            help = help,
-            requiresValue = true
-        )
-        argument.flags.associateTo(options) { it to COpt.Arg(argument, delegate) }
+        val argument = OptionDefinition(parseFlagString(flags), help, true)
+        argument.flags.associateTo(options) { it to COpt(argument, delegate) }
         return delegate
     }
 
     fun positional(name: String, help: String = ""): StringDelegate {
         val delegate = StringDelegate()
-        val arg = PositionalArgument(name, help)
+        val arg = PositionalDefinition(name, help)
         positions += CPos(arg, delegate)
         return delegate
     }
@@ -71,20 +57,17 @@ class Clingon {
 
     private fun parseMultiChar(name: String, value: String?) {
         val holder = options[name] ?: throw IllegalArgumentException("Unknown arg $name")
-        when(holder) {
-            is COpt.Arg -> {
-                if (value != null) {
-                    holder.delegate.setValue(value)
-                    waitingForValue = null
-                    parserState = ParserState.Initial
-                } else {
-                    waitingForValue = holder
-                    parserState = ParserState.PendingValue
-                }
+        if(holder.arg.takesArg) {
+            if (value != null) {
+                holder.delegate.setValue(value)
+                waitingForValue = null
+                parserState = ParserState.Initial
+            } else {
+                waitingForValue = holder
+                parserState = ParserState.PendingValue
             }
-            is COpt.NoArg -> {
-                holder.delegate.setValue(Unit)
-            }
+        } else {
+            holder.delegate.setValue("")
         }
     }
 
@@ -93,26 +76,23 @@ class Clingon {
         while(i < name.length) {
             val c = "-${name[i]}"
             val holder = options[c] ?: throw IllegalArgumentException("Unknown arg $c")
-            when(holder) {
-                is COpt.Arg -> {
-                    if(i == name.lastIndex) {
-                        waitingForValue = holder
-                        parserState = ParserState.PendingValue
-                        return
-                    } else {
-                        val j = i + 1
-                        val value =
-                            if(name[j] == '=') {
-                                if(j + 1 < name.length) name.substring(j + 1)
-                                else ""
-                            } else name.substring(j)
-                        holder.delegate.setValue(value)
-                    }
+            if(holder.arg.takesArg) {
+                if(i == name.lastIndex) {
+                    waitingForValue = holder
+                    parserState = ParserState.PendingValue
                     return
+                } else {
+                    val j = i + 1
+                    val value =
+                        if(name[j] == '=') {
+                            if(j + 1 < name.length) name.substring(j + 1)
+                            else ""
+                        } else name.substring(j)
+                    holder.delegate.setValue(value)
                 }
-                is COpt.NoArg -> {
-                    holder.delegate.setValue(Unit)
-                }
+                return
+            } else {
+                holder.delegate.setValue("")
             }
             i++
         }
@@ -145,8 +125,6 @@ class Clingon {
                 }
                 ParserState.PendingValue -> {
                     val holder = checkNotNull(waitingForValue) { "Waiting value not set" }
-                    holder as COpt.Arg
-
                     holder.delegate.setValue(arg)
                     parserState = ParserState.Initial
                     waitingForValue = null

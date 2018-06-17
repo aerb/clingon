@@ -6,7 +6,7 @@ interface ParserLifecycle {
     fun onParseDone()
 }
 
-interface SimpleDelegate<TIn, TOut>: ParserLifecycle {
+interface SimpleDelegate<in TIn, TOut>: ParserLifecycle {
     fun setValue(v: TIn)
     operator fun getValue(a: Any?, property: KProperty<*>): TOut?
 }
@@ -111,10 +111,10 @@ class StringDelegate: PropagatingDelegate<String, String> {
     override fun getValue(a: Any?, property: KProperty<*>): String? = _v
 }
 
-class BoolDelegate: PropagatingDelegate<Unit, Boolean> {
+class BoolDelegate: PropagatingDelegate<Any?, Boolean> {
     override var delegate: SimpleDelegate<Boolean, *>? = null
     private var _v: Boolean = false
-    override fun setValue(v: Unit) {
+    override fun setValue(v: Any?) {
         _v = true
         delegate?.setValue(true)
     }
