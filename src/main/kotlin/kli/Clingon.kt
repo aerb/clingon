@@ -12,23 +12,22 @@ class OptionArgument(
     val requiresValue: Boolean
 )
 
-
 private val validFlag = Regex("^-{1,2}[a-zA-Z0-9-_?]+")
 
-private fun parseFlagString(s: String): List<String> {
-    return s.split("|").map {
+private fun parseFlagString(s: String): List<String> =
+    s.split("|").map {
         it.trim().also {
             require(it.matches(validFlag)) { "Illegal flag name $it" }
         }
     }
-}
 
 class Clingon {
     data class CPos(val arg: PositionalArgument, val delegate: StringDelegate)
     private sealed class COpt {
         abstract val arg: OptionArgument
-        data class Arg(override val arg: OptionArgument, val delegate: StringDelegate): COpt()
-        data class NoArg(override val arg: OptionArgument, val delegate: BoolDelegate): COpt()
+        abstract val delegate: ParserLifecycle
+        data class Arg(override val arg: OptionArgument, override val delegate: StringDelegate): COpt()
+        data class NoArg(override val arg: OptionArgument, override val delegate: BoolDelegate): COpt()
     }
 
     private val positions = ArrayList<CPos>()
@@ -75,7 +74,7 @@ class Clingon {
         when(holder) {
             is COpt.Arg -> {
                 if (value != null) {
-                    holder.delegate.pushValue(value)
+                    holder.delegate.setValue(value)
                     waitingForValue = null
                     parserState = ParserState.Initial
                 } else {
@@ -84,7 +83,7 @@ class Clingon {
                 }
             }
             is COpt.NoArg -> {
-                holder.delegate.pushValue(Unit)
+                holder.delegate.setValue(Unit)
             }
         }
     }
@@ -107,12 +106,12 @@ class Clingon {
                                 if(j + 1 < name.length) name.substring(j + 1)
                                 else ""
                             } else name.substring(j)
-                        holder.delegate.pushValue(value)
+                        holder.delegate.setValue(value)
                     }
                     return
                 }
                 is COpt.NoArg -> {
-                    holder.delegate.pushValue(Unit)
+                    holder.delegate.setValue(Unit)
                 }
             }
             i++
@@ -139,14 +138,16 @@ class Clingon {
                             else -> throw IllegalArgumentException("Invalid flag $arg")
                         }
                     } else {
-                        positions[positionIndex++].delegate.pushValue(arg)
+                        if(arg.isNotEmpty()) {
+                            positions[positionIndex++].delegate.setValue(arg)
+                        }
                     }
                 }
                 ParserState.PendingValue -> {
                     val holder = checkNotNull(waitingForValue) { "Waiting value not set" }
                     holder as COpt.Arg
 
-                    holder.delegate.pushValue(arg)
+                    holder.delegate.setValue(arg)
                     parserState = ParserState.Initial
                     waitingForValue = null
                 }
@@ -154,5 +155,8 @@ class Clingon {
         }
 
         check(parserState != ParserState.PendingValue) { "Missing value for ${waitingForValue?.arg?.flags}" }
+
+        options.values.forEach { it.delegate.onParseDone() }
+        positions.forEach { it.delegate.onParseDone() }
     }
 }

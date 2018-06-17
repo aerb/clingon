@@ -2,102 +2,121 @@ package kli
 
 import kotlin.reflect.KProperty
 
-interface Delegate<in TIn, TOut> {
-    fun pushValue(v: TIn)
-    fun setDelegate(d: Delegate<TOut, *>)
-    operator fun getValue(c: Clingon?, property: KProperty<*>): TOut?
+interface ParserLifecycle {
+    fun onParseDone()
+}
+
+interface SimpleDelegate<TIn, TOut>: ParserLifecycle {
+    fun setValue(v: TIn)
+    operator fun getValue(a: Any?, property: KProperty<*>): TOut?
+}
+
+interface PropagatingDelegate<TIn, TOut>: SimpleDelegate<TIn, TOut> {
+    var delegate: SimpleDelegate<TOut, *>?
+
+    override fun onParseDone() {
+        delegate?.onParseDone()
+    }
+
+    fun default(function: () -> TOut): DefaultDelegate<TOut> =
+        DefaultDelegate(function)
+            .also { delegate = it }
+
+    fun require(): RequireDelegate<TOut> =
+        RequireDelegate<TOut>()
+            .also { delegate = it }
 
     fun <TMapped> map(transform: (TOut) -> TMapped): MapDelegate<TOut, TMapped> =
         MapDelegate(transform)
-            .also { setDelegate(it) }
+            .also { delegate = it }
 
     fun collect(): CollectDelegate<TOut> =
         CollectDelegate<TOut>()
-            .also { setDelegate(it) }
+            .also { delegate = it }
 
     fun count(): CountDelegate<TOut> =
         CountDelegate<TOut>()
-            .also { setDelegate(it) }
+            .also { delegate = it }
 }
 
-class MapDelegate<It, Ot>(
-    private val transform: (It) -> Ot
-): Delegate<It, Ot> {
+class RequireDelegate<TIn>: SimpleDelegate<TIn, TIn> {
+    private var _val: TIn? = null
+    override fun setValue(v: TIn) { _val = v }
+    override fun getValue(a: Any?, property: KProperty<*>): TIn =
+        _val ?: throw IllegalStateException("_val is null.")
 
-    private var _val: Ot? = null
-    private var _d: Delegate<Ot, *>? = null
-
-    override fun setDelegate(d: Delegate<Ot, *>) {
-        _d = d
+    override fun onParseDone() {
+        if(_val == null) {
+            throw IllegalArgumentException("")
+        }
     }
-
-    override fun pushValue(v: It) {
-        _val = transform(v)
-        _d?.pushValue(_val!!)
-    }
-
-    override fun getValue(c: Clingon?, property: KProperty<*>): Ot? = _val
 }
 
-class CollectDelegate<It>: Delegate<It, List<It>> {
-
-    private val _val = ArrayList<It>()
-    private var _d: Delegate<List<It>, *>? = null
-
-    override fun pushValue(v: It) {
-        _val += v
+class DefaultDelegate<TIn>(
+    private val function: () -> TIn
+): PropagatingDelegate<TIn, TIn> {
+    override var delegate: SimpleDelegate<TIn, *>? = null
+    private var _val: TIn? = null
+    override fun setValue(v: TIn) {
+        _val = v
+        delegate?.setValue(v)
     }
+    override fun getValue(a: Any?, property: KProperty<*>): TIn =
+        _val ?: throw IllegalStateException("_val is null.")
 
-    override fun setDelegate(d: Delegate<List<It>, *>) {
-        _d = d
+    override fun onParseDone() {
+        if(_val == null) {
+            val v = function()
+            _val = v
+            delegate?.setValue(v)
+
+        }
     }
-
-    override fun getValue(c: Clingon?, property: KProperty<*>): List<It> = _val
 }
 
-class CountDelegate<TIn>: Delegate<TIn, Int> {
+class MapDelegate<TIn, TOut>(
+    private val transform: (TIn) -> TOut
+): PropagatingDelegate<TIn, TOut> {
+    override var delegate: SimpleDelegate<TOut, *>? = null
+    private var _val: TOut? = null
+    override fun setValue(v: TIn) {
+        val transformed = transform(v)
+        _val = transformed
+        delegate?.setValue(transformed)
+    }
+    override fun getValue(a: Any?, property: KProperty<*>): TOut? = _val
+}
+
+class CollectDelegate<TIn>: PropagatingDelegate<TIn, List<TIn>> {
+    override var delegate: SimpleDelegate<List<TIn>, *>? = null
+    private val _val = ArrayList<TIn>()
+    override fun setValue(v: TIn) { _val += v }
+    override fun getValue(a: Any?, property: KProperty<*>): List<TIn> = _val
+}
+
+class CountDelegate<TIn>: PropagatingDelegate<TIn, Int> {
+    override var delegate: SimpleDelegate<Int, *>? = null
     private var _val = 0
-    private var _d: Delegate<Int, *>? = null
-    override fun pushValue(v: TIn) {
-        _val ++
-    }
-
-    override fun setDelegate(d: Delegate<Int, *>) {
-        _d = d
-    }
-
-    override fun getValue(c: Clingon?, property: KProperty<*>): Int = _val
+    override fun setValue(v: TIn) { _val ++ }
+    override fun getValue(a: Any?, property: KProperty<*>): Int = _val
 }
 
-class StringDelegate: Delegate<String, String> {
+class StringDelegate: PropagatingDelegate<String, String> {
+    override var delegate: SimpleDelegate<String, *>? = null
     private var _v: String? = null
-    private var _d: Delegate<String, *>? = null
-    override fun pushValue(v: String) {
+    override fun setValue(v: String) {
         _v = v
-        _d?.pushValue(v)
+        delegate?.setValue(v)
     }
-
-    override fun setDelegate(d: Delegate<String, *>) {
-        _d = d
-    }
-
-    override fun getValue(c: Clingon?, property: KProperty<*>): String? = _v
+    override fun getValue(a: Any?, property: KProperty<*>): String? = _v
 }
 
-
-class BoolDelegate: Delegate<Unit, Boolean> {
-
+class BoolDelegate: PropagatingDelegate<Unit, Boolean> {
+    override var delegate: SimpleDelegate<Boolean, *>? = null
     private var _v: Boolean = false
-    private var _d: Delegate<Boolean, *>? = null
-
-    override fun pushValue(v: Unit) {
+    override fun setValue(v: Unit) {
         _v = true
-        _d?.pushValue(true)
+        delegate?.setValue(true)
     }
-
-    override fun setDelegate(d: Delegate<Boolean, *>) {
-        _d = d
-    }
-
-    override fun getValue(c: Clingon?, property: KProperty<*>): Boolean = _v
+    override fun getValue(a: Any?, property: KProperty<*>): Boolean = _v
 }
