@@ -11,6 +11,8 @@ class OptionDefinition(
     val takesArg: Boolean
 )
 
+class ParseException(message: String, val option: OptionDefinition? = null): Exception(message)
+
 private val validFlag = Regex("^-{1,2}[a-zA-Z0-9-_?]+")
 
 internal fun MatchGroupCollection.requiredGroup(i: Int): String =
@@ -55,6 +57,8 @@ class Clingon {
 
     fun parse(args: Array<String>) {
         val tokenizer = CliTokenizer(args)
+        options.values.forEach { it.delegate.onPreParse() }
+        positions.forEach { it.delegate.onPreParse() }
 
         while(tokenizer.hasNext()) {
             val next = tokenizer.nextType()
@@ -66,6 +70,11 @@ class Clingon {
                         if(!tokenizer.hasNext()) throw IllegalArgumentException("Argument required for $flag")
                         option.delegate.setValue(tokenizer.readOptionArgument())
                     } else {
+                        if(tokenizer.hasNext() && tokenizer.nextType() == Token.Equals)
+                            throw ParseException(
+                                "Option $flag does not take an argument, but was given '=${tokenizer.readOptionArgument()}'",
+                                option = option.arg
+                            )
                         option.delegate.setValue("")
                     }
                 }
@@ -76,7 +85,7 @@ class Clingon {
             }
         }
 
-        options.values.forEach { it.delegate.onParseDone() }
-        positions.forEach { it.delegate.onParseDone() }
+        options.values.forEach { it.delegate.onPostParse() }
+        positions.forEach { it.delegate.onPostParse() }
     }
 }

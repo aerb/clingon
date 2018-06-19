@@ -3,7 +3,7 @@ package kli
 enum class Token {
     ShortFlag,
     Flag,
-    OptionArgument,
+    Equals,
     Positional,
     OptionTerminator
 }
@@ -50,10 +50,10 @@ class CliTokenizer(private val args: Array<String>) {
             }
             Context.ShortFlag -> {
                 val c = arg[cI]
-                if(c == '=') Token.OptionArgument
+                if(c == '=') Token.Equals
                 else Token.ShortFlag
             }
-            Context.Flag -> Token.OptionArgument
+            Context.Flag -> Token.Equals
         }
     }
 

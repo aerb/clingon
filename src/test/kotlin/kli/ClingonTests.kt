@@ -37,6 +37,16 @@ class ClingonTests {
     }
 
     @Test
+    fun errors() {
+        val cli = Clingon()
+        val x by cli.flag("-x")
+        val e = assertFailsWith(ParseException::class) { cli.parse("-x=".toArgArray()) }
+        println(e.message)
+        assertTrue(e.option != null && "-x" in e.option!!.flags)
+
+    }
+
+    @Test
     fun single() {
         val cli = Clingon()
 
@@ -64,6 +74,23 @@ class ClingonTests {
         assertTrue(help)
         assertFalse(j)
         assertEquals(3, verbose)
+    }
+
+    @Test
+    fun combined() {
+        val cli = Clingon()
+
+        val a by cli.flag("-a")
+        val b by cli.flag("-b")
+        val c by cli.flag("-c")
+        val d by cli.option("-d")
+
+        cli.parse("-abcdHello".toArgArray())
+
+        assertTrue(a)
+        assertTrue(b)
+        assertTrue(c)
+        assertEquals("Hello", d)
     }
 
     @Test
