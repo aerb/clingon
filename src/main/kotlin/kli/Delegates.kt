@@ -15,9 +15,8 @@ interface SimpleDelegate<in TIn, TOut>: ParserLifecycle {
 interface AggregateDelegate
 
 interface PropagatingDelegate<TIn, TOut>: SimpleDelegate<TIn, TOut> {
-
     var delegate: SimpleDelegate<TOut, *>?
-
+    
     override fun onPreParse() {
         delegate?.onPreParse()
     }
@@ -38,8 +37,8 @@ interface PropagatingDelegate<TIn, TOut>: SimpleDelegate<TIn, TOut> {
         MapDelegate(transform)
             .also { delegate = it }
 
-    fun collect(): CollectDelegate<TOut> =
-        CollectDelegate<TOut>()
+    fun collect(range: IntRange = 0..Int.MAX_VALUE): CollectDelegate<TOut> =
+        CollectDelegate<TOut>(range)
             .also { delegate = it }
 
     fun count(): CountDelegate<TOut> =
@@ -95,11 +94,17 @@ class MapDelegate<TIn, TOut>(
     override fun getValue(a: Any?, property: KProperty<*>): TOut? = _val
 }
 
-class CollectDelegate<TIn>: PropagatingDelegate<TIn, List<TIn>>, AggregateDelegate {
+class CollectDelegate<TIn>(private val range: IntRange): PropagatingDelegate<TIn, List<TIn>>, AggregateDelegate {
     override var delegate: SimpleDelegate<List<TIn>, *>? = null
     private val _val = ArrayList<TIn>()
     override fun setValue(v: TIn) { _val += v }
     override fun getValue(a: Any?, property: KProperty<*>): List<TIn> = _val
+    override fun onPostParse() {
+        super.onPostParse()
+        if(_val.size !in range) {
+            throw IllegalArgumentException("")
+        }
+    }
 }
 
 class CountDelegate<TIn>: PropagatingDelegate<TIn, Int>, AggregateDelegate {
@@ -108,14 +113,6 @@ class CountDelegate<TIn>: PropagatingDelegate<TIn, Int>, AggregateDelegate {
     override fun setValue(v: TIn) { _val ++ }
     override fun getValue(a: Any?, property: KProperty<*>): Int = _val
 }
-
-fun SimpleDelegate<*,*>.any(predicate: (SimpleDelegate<*,*>) -> Boolean): Boolean =
-    if(predicate(this)) true
-    else {
-        if(this is PropagatingDelegate) {
-            delegate?.any(predicate) ?: false
-        } else false
-    }
 
 class StringDelegate: PropagatingDelegate<String, String> {
     override var delegate: SimpleDelegate<String, *>? = null

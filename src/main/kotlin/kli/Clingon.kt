@@ -18,11 +18,19 @@ private val validFlag = Regex("^-{1,2}[a-zA-Z0-9-_?]+")
 internal fun MatchGroupCollection.requiredGroup(i: Int): String =
     this[i]?.value ?: throw IllegalStateException("Expected group of index $i.")
 
-private fun parseFlagString(s: String): List<String> =
+internal fun parseFlagString(s: String): List<String> =
     s.split("|").map {
         it.trim().also {
             require(it.matches(validFlag)) { "Illegal flag name $it" }
         }
+    }
+
+internal fun SimpleDelegate<*,*>.any(predicate: (SimpleDelegate<*,*>) -> Boolean): Boolean =
+    if(predicate(this)) true
+    else {
+        if(this is PropagatingDelegate) {
+            delegate?.any(predicate) ?: false
+        } else false
     }
 
 class Clingon {

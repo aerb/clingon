@@ -102,11 +102,13 @@ class ClingonTests {
         val verbose by cli.flag("-v | --verbose").count()
         val first by cli.positional("first")
         val second by cli.positional("second").map { it.toInt() }
+        val third by cli.positional("third").collect()
 
-        cli.parse("-? -v hello 10".toArgArray())
+        cli.parse("-? -v hello 10 a b c d".toArgArray())
 
         assertEquals("hello", first)
         assertEquals(10, second)
+        assertEquals(listOf("a", "b", "c", "d"), third)
     }
 }
 
