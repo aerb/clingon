@@ -72,7 +72,9 @@ class Clingon {
             val next = tokenizer.nextType()
             when(next) {
                 Token.ShortFlag, Token.Flag -> {
-                    val flag = if(next == Token.ShortFlag) "-${tokenizer.readShortFlag()}" else "--${tokenizer.readFlag()}"
+                    val flag =
+                        if(next == Token.ShortFlag) "-${tokenizer.readShortFlag()}"
+                        else "--${tokenizer.readFlag()}"
                     val option = options[flag] ?: throw IllegalArgumentException("Unknown flag $flag")
                     if(option.arg.takesArg) {
                         if(!tokenizer.hasNext()) throw IllegalArgumentException("Argument required for $flag")
@@ -87,7 +89,16 @@ class Clingon {
                     }
                 }
                 Token.Positional -> {
-                    positions[positionIndex++].delegate.setValue(tokenizer.readPositional())
+                    while (true) {
+                        if(positionIndex >= positions.size) throw IllegalArgumentException()
+                        val arg = positions[positionIndex]
+                        if(arg.delegate.willAcceptValue()) {
+                            arg.delegate.setValue(tokenizer.readPositional())
+                            break
+                        } else {
+                            positionIndex ++
+                        }
+                    }
                 }
                 else -> throw IllegalStateException("Unexpected $next")
             }

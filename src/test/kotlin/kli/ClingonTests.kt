@@ -98,8 +98,8 @@ class ClingonTests {
         val cli = Clingon()
 
         val help by cli.flag("--help | -? | -h")
-        val j by cli.flag("-j")
         val verbose by cli.flag("-v | --verbose").count()
+
         val first by cli.positional("first")
         val second by cli.positional("second").map { it.toInt() }
         val third by cli.positional("third").collect()
