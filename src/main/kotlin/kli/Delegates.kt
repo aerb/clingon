@@ -8,7 +8,7 @@ interface ParserLifecycle {
 }
 
 interface SimpleDelegate<in TIn, TOut>: ParserLifecycle {
-    fun setValue(v: TIn)
+    fun storeValue(v: TIn)
     operator fun getValue(a: Any?, property: KProperty<*>?): TOut?
     fun willAcceptValue(): Boolean =
         getValue(null, null) == null
@@ -54,7 +54,7 @@ interface PropagatingDelegate<TIn, TOut>: SimpleDelegate<TIn, TOut> {
 
 class RequireDelegate<TIn>: SimpleDelegate<TIn, TIn> {
     private var _val: TIn? = null
-    override fun setValue(v: TIn) { _val = v }
+    override fun storeValue(v: TIn) { _val = v }
     override fun getValue(a: Any?, property: KProperty<*>?): TIn =
         _val ?: throw IllegalStateException("_val is null.")
     override fun willAcceptValue(): Boolean = _val != null
@@ -71,9 +71,9 @@ class DefaultDelegate<TIn>(
 ): PropagatingDelegate<TIn, TIn> {
     override var delegate: SimpleDelegate<TIn, *>? = null
     private var _val: TIn? = null
-    override fun setValue(v: TIn) {
+    override fun storeValue(v: TIn) {
         _val = v
-        delegate?.setValue(v)
+        delegate?.storeValue(v)
     }
     override fun getValue(a: Any?, property: KProperty<*>?): TIn =
         _val ?: throw IllegalStateException("_val is null.")
@@ -82,7 +82,7 @@ class DefaultDelegate<TIn>(
         if(_val == null) {
             val v = function()
             _val = v
-            delegate?.setValue(v)
+            delegate?.storeValue(v)
         }
     }
 }
@@ -92,10 +92,10 @@ class MapDelegate<TIn, TOut>(
 ): PropagatingDelegate<TIn, TOut> {
     override var delegate: SimpleDelegate<TOut, *>? = null
     private var _val: TOut? = null
-    override fun setValue(v: TIn) {
+    override fun storeValue(v: TIn) {
         val transformed = transform(v)
         _val = transformed
-        delegate?.setValue(transformed)
+        delegate?.storeValue(transformed)
     }
     override fun getValue(a: Any?, property: KProperty<*>?): TOut? = _val
 }
@@ -103,7 +103,7 @@ class MapDelegate<TIn, TOut>(
 class CollectDelegate<TIn>(private val range: IntRange): PropagatingDelegate<TIn, List<TIn>>, AggregateDelegate {
     override var delegate: SimpleDelegate<List<TIn>, *>? = null
     private val _val = ArrayList<TIn>()
-    override fun setValue(v: TIn) { _val += v }
+    override fun storeValue(v: TIn) { _val += v }
     override fun getValue(a: Any?, property: KProperty<*>?): List<TIn> = _val
     override fun willAcceptValue(): Boolean = _val.size < range.endInclusive
     override fun onPostParse() {
@@ -117,7 +117,7 @@ class CollectDelegate<TIn>(private val range: IntRange): PropagatingDelegate<TIn
 class CountDelegate<TIn>: PropagatingDelegate<TIn, Int>, AggregateDelegate {
     override var delegate: SimpleDelegate<Int, *>? = null
     private var _val = 0
-    override fun setValue(v: TIn) { _val ++ }
+    override fun storeValue(v: TIn) { _val ++ }
     override fun getValue(a: Any?, property: KProperty<*>?): Int = _val
     override fun willAcceptValue(): Boolean = true
 }
@@ -132,12 +132,12 @@ class StringDelegate: PropagatingDelegate<String, String> {
         enforceSingle = !any { it is AggregateDelegate }
     }
 
-    override fun setValue(v: String) {
+    override fun storeValue(v: String) {
         if(_v != null && enforceSingle) {
             throw IllegalArgumentException("Only single value expected for $this")
         } else {
             _v = v
-            delegate?.setValue(v)
+            delegate?.storeValue(v)
         }
     }
     override fun getValue(a: Any?, property: KProperty<*>?): String? = _v
@@ -146,9 +146,9 @@ class StringDelegate: PropagatingDelegate<String, String> {
 class BoolDelegate: PropagatingDelegate<Any?, Boolean> {
     override var delegate: SimpleDelegate<Boolean, *>? = null
     private var _v: Boolean = false
-    override fun setValue(v: Any?) {
+    override fun storeValue(v: Any?) {
         _v = true
-        delegate?.setValue(true)
+        delegate?.storeValue(true)
     }
     override fun getValue(a: Any?, property: KProperty<*>?): Boolean = _v
 }

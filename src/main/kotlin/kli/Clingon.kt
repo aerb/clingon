@@ -78,14 +78,22 @@ class Clingon {
                     val option = options[flag] ?: throw IllegalArgumentException("Unknown flag $flag")
                     if(option.arg.takesArg) {
                         if(!tokenizer.hasNext()) throw IllegalArgumentException("Argument required for $flag")
-                        option.delegate.setValue(tokenizer.readOptionArgument())
+                        option.delegate.storeValue(tokenizer.readOptionArgument())
+
+                        while (option.delegate.willAcceptValue()) {
+                            if(tokenizer.hasNext() &&
+                               tokenizer.nextType().let { it == Token.Positional || it == Token.Equals }
+                            ) {
+                                option.delegate.storeValue(tokenizer.readPositional())
+                            } else break
+                        }
                     } else {
                         if(tokenizer.hasNext() && tokenizer.nextType() == Token.Equals)
                             throw ParseException(
                                 "Option $flag does not take an argument, but was given '=${tokenizer.readOptionArgument()}'",
                                 option = option.arg
                             )
-                        option.delegate.setValue("")
+                        option.delegate.storeValue("")
                     }
                 }
                 Token.Positional -> {
@@ -93,7 +101,7 @@ class Clingon {
                         if(positionIndex >= positions.size) throw IllegalArgumentException()
                         val arg = positions[positionIndex]
                         if(arg.delegate.willAcceptValue()) {
-                            arg.delegate.setValue(tokenizer.readPositional())
+                            arg.delegate.storeValue(tokenizer.readPositional())
                             break
                         } else {
                             positionIndex ++

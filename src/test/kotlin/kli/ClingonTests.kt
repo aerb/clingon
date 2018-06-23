@@ -106,5 +106,17 @@ class ClingonTests {
         second shouldEqual 10
         third shouldEqual listOf("a", "b", "c", "d")
     }
+
+    @Test
+    fun multiple() {
+        val cli = Clingon()
+        val i by cli.option("-i").collect()
+        val o by cli.option("-o").collect()
+
+        cli.parse("-i a b c -o d e -o f")
+
+        i shouldEqual listOf("a", "b", "c")
+        o shouldEqual listOf("d", "e", "f")
+    }
 }
 
