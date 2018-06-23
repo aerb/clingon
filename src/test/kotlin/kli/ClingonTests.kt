@@ -1,13 +1,11 @@
 package kli
 
-import kotlin.test.*
+import org.amshove.kluent.shouldEqual
+import org.amshove.kluent.shouldThrow
+import kotlin.test.Test
 
 @Suppress("UNUSED_VARIABLE")
 class ClingonTests {
-    private val whitespace = Regex("\\s+")
-    private fun String.toArgArray(): Array<String> =
-        if(isEmpty()) emptyArray() else split(whitespace).toTypedArray()
-
     @Test
     fun complex() {
         val cli = Clingon()
@@ -17,33 +15,30 @@ class ClingonTests {
         val tags by cli.option("--tag").map { it }.collect()
         val z by cli.option("-z").default { "ZZZ" }
 
-        cli.parse("--name ringo --age=10 --tag a --tag b".toArgArray())
+        cli.parse("--name ringo --age=10 --tag a --tag b")
 
-        assertEquals("ringo", name)
-        assertEquals(10, age)
-        assertEquals(listOf("a", "b"), tags)
-        assertEquals("ZZZ", z)
+        name shouldEqual "ringo"
+        age shouldEqual 10
+        tags shouldEqual listOf("a", "b")
+        z shouldEqual "ZZZ"
     }
 
     @Test
     fun require() {
         val cli = Clingon()
-
         val x by cli.option("-x").require()
 
-        assertFailsWith(IllegalArgumentException::class) {
-            cli.parse("".toArgArray())
-        }
+        invoking { cli.parse("") } shouldThrow IllegalArgumentException::class
     }
 
     @Test
     fun errors() {
         val cli = Clingon()
         val x by cli.flag("-x")
-        val e = assertFailsWith(ParseException::class) { cli.parse("-x=".toArgArray()) }
-        println(e.message)
-        assertTrue(e.option != null && "-x" in e.option!!.flags)
 
+        val e = invoking { cli.parse("-x=") } shouldThrow ParseException::class
+
+        "-x" shouldBeInNullable e.exception.option?.flags
     }
 
     @Test
@@ -54,11 +49,11 @@ class ClingonTests {
         val age by cli.option("--age | -a").map { it.toInt() }
         val day by cli.option("-d").map { it.toInt() }
 
-        cli.parse("-a=10 -n ringo -d10".toArgArray())
+        cli.parse("-a=10 -n ringo -d10")
 
-        assertEquals("ringo", name)
-        assertEquals(10, age)
-        assertEquals(10, day)
+        name shouldEqual "ringo"
+        age shouldEqual 10
+        day shouldEqual 10
     }
 
     @Test
@@ -69,11 +64,12 @@ class ClingonTests {
         val j by cli.flag("-j")
         val verbose by cli.flag("-v | --verbose").count()
 
-        cli.parse("-? -vv --verbose".toArgArray())
+        cli.parse("-? -vv --verbose")
 
-        assertTrue(help)
-        assertFalse(j)
-        assertEquals(3, verbose)
+
+        help shouldEqual true
+        j shouldEqual false
+        verbose shouldEqual 3
     }
 
     @Test
@@ -85,12 +81,12 @@ class ClingonTests {
         val c by cli.flag("-c")
         val d by cli.option("-d")
 
-        cli.parse("-abcdHello".toArgArray())
+        cli.parse("-abcdHello")
 
-        assertTrue(a)
-        assertTrue(b)
-        assertTrue(c)
-        assertEquals("Hello", d)
+        a shouldEqual true
+        b shouldEqual true
+        c shouldEqual true
+        d shouldEqual "Hello"
     }
 
     @Test
@@ -104,12 +100,11 @@ class ClingonTests {
         val second by cli.positional("second").map { it.toInt() }
         val third by cli.positional("third").collect()
 
-        cli.parse("-? -v hello 10 a b c d".toArgArray())
+        cli.parse("-? -v hello 10 a b c d")
 
-        assertEquals("hello", first)
-        assertEquals(10, second)
-        assertEquals(listOf("a", "b", "c", "d"), third)
+        first shouldEqual "hello"
+        second shouldEqual 10
+        third shouldEqual listOf("a", "b", "c", "d")
     }
 }
-
 
