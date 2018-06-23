@@ -66,7 +66,6 @@ class ClingonTests {
 
         cli.parse("-? -vv --verbose")
 
-
         help shouldEqual true
         j shouldEqual false
         verbose shouldEqual 3

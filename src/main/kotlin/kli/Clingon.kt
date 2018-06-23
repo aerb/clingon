@@ -25,37 +25,37 @@ internal fun parseFlagString(s: String): List<String> =
         }
     }
 
-internal fun SimpleDelegate<*,*>.any(predicate: (SimpleDelegate<*,*>) -> Boolean): Boolean =
+internal fun ArgumentStore<*,*>.any(predicate: (ArgumentStore<*,*>) -> Boolean): Boolean =
     if(predicate(this)) true
     else {
-        if(this is PropagatingDelegate) {
-            delegate?.any(predicate) ?: false
+        if(this is PropagatingStore) {
+            next?.any(predicate) ?: false
         } else false
     }
 
 class Clingon {
-    data class CPos(val arg: PositionalDefinition, val delegate: StringDelegate)
-    data class COpt(val arg: OptionDefinition, val delegate: SimpleDelegate<String, *>)
+    data class CPos(val arg: PositionalDefinition, val delegate: SingleStore)
+    data class COpt(val arg: OptionDefinition, val delegate: ArgumentStore<String, *>)
 
     private val positions = ArrayList<CPos>()
     private val options = HashMap<String, COpt>()
 
-    fun flag(flags: String, help: String = ""): BoolDelegate {
-        val delegate = BoolDelegate()
+    fun flag(flags: String, help: String = ""): BoolStore {
+        val delegate = BoolStore()
         val argument = OptionDefinition(parseFlagString(flags), help, takesArg = false)
         argument.flags.associateTo(options) { it to COpt(argument, delegate) }
         return delegate
     }
 
-    fun option(flags: String, help: String = ""): StringDelegate {
-        val delegate = StringDelegate()
+    fun option(flags: String, help: String = ""): SingleStore {
+        val delegate = SingleStore()
         val argument = OptionDefinition(parseFlagString(flags), help, true)
         argument.flags.associateTo(options) { it to COpt(argument, delegate) }
         return delegate
     }
 
-    fun positional(name: String, help: String = ""): StringDelegate {
-        val delegate = StringDelegate()
+    fun positional(name: String, help: String = ""): SingleStore {
+        val delegate = SingleStore()
         val arg = PositionalDefinition(name, help)
         positions += CPos(arg, delegate)
         return delegate
