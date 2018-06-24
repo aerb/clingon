@@ -1,4 +1,4 @@
-package kli
+package clingon
 
 import org.amshove.kluent.shouldEqual
 import org.amshove.kluent.shouldThrow

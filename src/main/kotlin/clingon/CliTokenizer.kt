@@ -1,6 +1,6 @@
-package kli
+package clingon
 
-enum class Token {
+enum class TokenType {
     ShortFlag,
     Flag,
     Equals,
@@ -8,13 +8,13 @@ enum class Token {
     OptionTerminator
 }
 
-enum class Context {
-    TopLevel,
-    ShortFlag,
-    Flag
-}
-
 class CliTokenizer(private val args: Array<String>) {
+
+    enum class ParseContext {
+        TopLevel,
+        ShortFlag,
+        Flag
+    }
 
     private var i: Int = 0
     private var cI: Int = 0
@@ -22,38 +22,38 @@ class CliTokenizer(private val args: Array<String>) {
 
     fun hasNext(): Boolean = i < args.size
 
-    private var context: Context = Context.TopLevel
+    private var context: ParseContext = ParseContext.TopLevel
 
-    fun nextType(): Token {
+    fun nextType(): TokenType {
         val arg = args[i]
         return when(context) {
-            Context.TopLevel -> {
+            ParseContext.TopLevel -> {
                 val match = argumentPattern.matchEntire(arg)?.groups
                 if (match != null) {
                     val dash = match.requiredGroup(1)
                     val name = match[2]?.value
 
                     if(dash.length == 1 && name != null) {
-                        Token.ShortFlag
+                        TokenType.ShortFlag
                     } else if(dash.length == 2) {
                         if(name == null) {
-                            Token.OptionTerminator
+                            TokenType.OptionTerminator
                         } else {
-                            Token.Flag
+                            TokenType.Flag
                         }
                     } else {
-                        Token.Positional
+                        TokenType.Positional
                     }
                 } else {
-                    Token.Positional
+                    TokenType.Positional
                 }
             }
-            Context.ShortFlag -> {
+            ParseContext.ShortFlag -> {
                 val c = arg[cI]
-                if(c == '=') Token.Equals
-                else Token.ShortFlag
+                if(c == '=') TokenType.Equals
+                else TokenType.ShortFlag
             }
-            Context.Flag -> Token.Equals
+            ParseContext.Flag -> TokenType.Equals
         }
     }
 
@@ -63,16 +63,16 @@ class CliTokenizer(private val args: Array<String>) {
 
     fun readOptionArgument(): String {
         when(context) {
-            Context.ShortFlag, Context.Flag -> {
+            ParseContext.ShortFlag, ParseContext.Flag -> {
                 val arg = args[i]
                 val c = arg[cI]
                 val startIndex = if(c == '=') cI + 1 else cI
                 i ++
                 cI = 0
-                context = Context.TopLevel
+                context = ParseContext.TopLevel
                 return arg.substring(startIndex)
             }
-            Context.TopLevel -> {
+            ParseContext.TopLevel -> {
                 val a = args[i]
                 i ++
                 return a
@@ -81,27 +81,25 @@ class CliTokenizer(private val args: Array<String>) {
         }
     }
 
-
-
     fun readShortFlag(): Char {
         val arg = args[i]
         when(context) {
-            Context.TopLevel -> {
+            ParseContext.TopLevel -> {
                 val c = arg[cI + 1]
                 if(arg.length == 2) i ++
                 else {
                     cI += 2
-                    context = Context.ShortFlag
+                    context = ParseContext.ShortFlag
                 }
                 return c
             }
-            Context.ShortFlag -> {
+            ParseContext.ShortFlag -> {
                 val c = arg[cI]
                 if (cI < arg.lastIndex) cI ++
                 else {
                     cI = 0
                     i ++
-                    context = Context.TopLevel
+                    context = ParseContext.TopLevel
                 }
                 return c
             }
@@ -110,20 +108,20 @@ class CliTokenizer(private val args: Array<String>) {
     }
 
     fun readFlag(): String {
-        if(context != Context.TopLevel) illegalState()
+        if(context != ParseContext.TopLevel) illegalState()
         val arg = args[i]
         val flag = arg.drop(2).takeWhile { it != '=' }
         if(flag.length == arg.length - 2) {
             i ++
         } else {
-            context = Context.Flag
+            context = ParseContext.Flag
             cI = flag.length + 2
         }
         return flag
     }
 
     fun readPositional(): String {
-        check(context == Context.TopLevel)
+        check(context == ParseContext.TopLevel)
         val value = args[i]
         i ++
         return value

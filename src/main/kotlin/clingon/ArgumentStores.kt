@@ -1,4 +1,4 @@
-package kli
+package clingon
 
 import kotlin.reflect.KProperty
 
@@ -8,6 +8,7 @@ interface ParserLifecycle {
 }
 
 interface ArgumentDelegate<T> {
+    val argument: ArgumentDefinition
     operator fun getValue(a: Any?, property: KProperty<*>?): T?
 }
 
@@ -16,51 +17,49 @@ interface ChainableArgumentDelegate<TOut>: ArgumentDelegate<TOut> {
     var next: ArgumentStore<TOut, *>?
 
     fun default(function: () -> TOut): ChainableArgumentDelegate<TOut> =
-        DefaultStore(function)
+        DefaultStore(function, argument)
             .also { next = it }
 
     fun require(): ArgumentDelegate<TOut> =
-        RequiredStore<TOut>()
+        RequiredStore<TOut>(argument)
             .also { next = it }
 
     fun <TMapped> map(transform: (TOut) -> TMapped): ChainableArgumentDelegate<TMapped> =
-        MapStore(transform)
+        MapStore(transform, argument)
             .also { next = it }
 
-    fun collect(range: IntRange = 0..Int.MAX_VALUE): ArgumentDelegate<List<TOut>> =
-        CollectStore<TOut>(range)
+    fun collect(atLeast: Int = 0, atMost: Int = Int.MAX_VALUE): ArgumentDelegate<List<TOut>> =
+        CollectStore<TOut>(atLeast..atMost, argument)
+            .also { next = it }
+
+    fun collectExactly(count: Int): ArgumentDelegate<List<TOut>> =
+        CollectStore<TOut>(count..count, argument)
             .also { next = it }
 
     fun count(): ArgumentDelegate<Int> =
-        CountStore<TOut>()
+        CountStore<TOut>(argument)
             .also { next = it }
 }
 
 interface ArgumentStore<in TIn, TOut>: ArgumentDelegate<TOut>, ParserLifecycle {
+    override val argument: ArgumentDefinition
     fun storeValue(v: TIn)
-    fun willAcceptValue(): Boolean =
-        getValue(null, null) == null
+    fun willAcceptValue(): Boolean = getValue(null, null) == null
 }
 
 interface AggregateStore {
-
+    val range: IntRange
 }
 
 interface PropagatingStore<TIn, TOut>: ArgumentStore<TIn, TOut>, ChainableArgumentDelegate<TOut> {
-    override fun willAcceptValue(): Boolean =
-        next?.willAcceptValue() ?: (getValue(null, null) == null)
-    
-
-    override fun onPreParse() {
-        next?.onPreParse()
-    }
-
-    override fun onPostParse() {
-        next?.onPostParse()
-    }
+    override fun willAcceptValue(): Boolean = next?.willAcceptValue() ?: super.willAcceptValue()
+    override fun onPreParse() { next?.onPreParse() }
+    override fun onPostParse() { next?.onPostParse() }
 }
 
-class RequiredStore<TIn>: ArgumentStore<TIn, TIn> {
+class RequiredStore<TIn>(
+    override val argument: ArgumentDefinition
+): ArgumentStore<TIn, TIn> {
     private var value: TIn? = null
     override fun storeValue(v: TIn) { value = v }
     override fun getValue(a: Any?, property: KProperty<*>?): TIn =
@@ -75,7 +74,8 @@ class RequiredStore<TIn>: ArgumentStore<TIn, TIn> {
 }
 
 class DefaultStore<TIn>(
-    private val function: () -> TIn
+    private val function: () -> TIn,
+    override val argument: ArgumentDefinition
 ): PropagatingStore<TIn, TIn> {
     override var next: ArgumentStore<TIn, *>? = null
     private var value: TIn? = null
@@ -97,7 +97,8 @@ class DefaultStore<TIn>(
 }
 
 class MapStore<TIn, TOut>(
-    private val transform: (TIn) -> TOut
+    private val transform: (TIn) -> TOut,
+    override val argument: ArgumentDefinition
 ): PropagatingStore<TIn, TOut> {
     override var next: ArgumentStore<TOut, *>? = null
     private var value: TOut? = null
@@ -109,7 +110,10 @@ class MapStore<TIn, TOut>(
     override fun getValue(a: Any?, property: KProperty<*>?): TOut? = value
 }
 
-class CollectStore<TIn>(private val range: IntRange): ArgumentStore<TIn, List<TIn>>, AggregateStore {
+class CollectStore<TIn>(
+    override val range: IntRange,
+    override val argument: ArgumentDefinition
+): ArgumentStore<TIn, List<TIn>>, AggregateStore {
     private val arguments = ArrayList<TIn>()
     override fun storeValue(v: TIn) { arguments += v }
     override fun getValue(a: Any?, property: KProperty<*>?): List<TIn> = arguments
@@ -122,14 +126,19 @@ class CollectStore<TIn>(private val range: IntRange): ArgumentStore<TIn, List<TI
     }
 }
 
-class CountStore<TIn>: ArgumentStore<TIn, Int>, AggregateStore {
+class CountStore<TIn>(
+    override val argument: ArgumentDefinition
+): ArgumentStore<TIn, Int>, AggregateStore {
     private var count = 0
     override fun storeValue(v: TIn) { count ++ }
     override fun getValue(a: Any?, property: KProperty<*>?): Int = count
     override fun willAcceptValue(): Boolean = true
+    override val range: IntRange = IntRange(0, Int.MAX_VALUE)
 }
 
-class SingleStore: PropagatingStore<String, String> {
+class SingleStore(
+    override val argument: ArgumentDefinition
+): PropagatingStore<String, String> {
     override var next: ArgumentStore<String, *>? = null
     private var value: String? = null
     private var enforceSingle = true
@@ -150,7 +159,9 @@ class SingleStore: PropagatingStore<String, String> {
     override fun getValue(a: Any?, property: KProperty<*>?): String? = value
 }
 
-class BoolStore: PropagatingStore<Any?, Boolean> {
+class BoolStore(
+    override val argument: ArgumentDefinition
+): PropagatingStore<Any?, Boolean> {
     override var next: ArgumentStore<Boolean, *>? = null
     private var value: Boolean = false
     override fun storeValue(v: Any?) {

@@ -8,7 +8,7 @@
     <name>clingon</name>
     <url>http://maven.apache.org</url>
     <properties>
-        <kotlin.version>1.2.41</kotlin.version>
+        <kotlin.version>1.2.50</kotlin.version>
     </properties>
     <repositories>
         <repository>
