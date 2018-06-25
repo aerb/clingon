@@ -9,22 +9,25 @@ data class ArgumentDefinition(
 
 class ParseException(message: String, val option: ArgumentDefinition? = null): Exception(message)
 
-class Clingon {
+class Clingon(val name: String = "") {
 
     private val positions = ArrayList<ArgumentStore<String, *>>()
-    private val options = HashMap<String, ArgumentStore<String, *>>()
+    private val optionMap = HashMap<String, ArgumentStore<String, *>>()
+    private val options = ArrayList<ArgumentDefinition>()
 
     fun flag(flags: String, help: String = ""): BoolStore {
         val argument = ArgumentDefinition("", parseFlagString(flags), help, takesArg = false)
         val delegate = BoolStore(argument)
-        argument.flags.associateTo(options) { it to delegate }
+        argument.flags.associateTo(optionMap) { it to delegate }
+        options += argument
         return delegate
     }
 
     fun option(flags: String, help: String = ""): SingleStore {
         val argument = ArgumentDefinition("", parseFlagString(flags), help, takesArg = true)
         val delegate = SingleStore(argument)
-        argument.flags.associateTo(options) { it to delegate }
+        argument.flags.associateTo(optionMap) { it to delegate }
+        options += argument
         return delegate
     }
 
@@ -35,11 +38,39 @@ class Clingon {
         return delegate
     }
 
+    fun buildHelp(): String {
+        val indent = 30
+        return buildString {
+            appendln("$name ")
+            for(position in positions) {
+                val line = StringBuilder()
+                line.append("  ${position.argument.name}")
+                while (line.length < indent) {
+                    line.append(" ")
+                }
+                line.append(position.argument.help)
+                appendln(line)
+            }
+            appendln()
+            for(option in options) {
+                val line = StringBuilder()
+                line.append("  ${option.flags.sorted().reversed().joinToString(", ")}")
+                while (line.length < indent) {
+                    line.append(" ")
+                }
+                line.append(option.help)
+                appendln(line)
+            }
+        }
+    }
+
+
+
     private var positionIndex = 0
 
     fun parse(args: Array<String>) {
         val tokenizer = CliTokenizer(args)
-        options.values.forEach { it.onPreParse() }
+        optionMap.values.forEach { it.onPreParse() }
         positions.forEach { it.onPreParse() }
 
         while(tokenizer.hasNext()) {
@@ -49,7 +80,7 @@ class Clingon {
                     val flag =
                         if(next == TokenType.ShortFlag) "-${tokenizer.readShortFlag()}"
                         else "--${tokenizer.readFlag()}"
-                    val option = options[flag] ?: throw IllegalArgumentException("Unknown flag $flag")
+                    val option = optionMap[flag] ?: throw IllegalArgumentException("Unknown flag $flag")
                     if(option.argument.takesArg) {
                         if(!tokenizer.hasNext()) throw IllegalArgumentException("Argument required for $flag")
                         option.storeValue(tokenizer.readOptionArgument())
@@ -86,7 +117,7 @@ class Clingon {
             }
         }
 
-        options.values.forEach { it.onPostParse() }
+        optionMap.values.forEach { it.onPostParse() }
         positions.forEach { it.onPostParse() }
     }
 }

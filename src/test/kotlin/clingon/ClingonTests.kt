@@ -31,6 +31,15 @@ class ClingonTests {
         invoking { cli.parse("") } shouldThrow IllegalArgumentException::class
     }
 
+
+    @Test
+    fun `test guaranteed interface`() {
+        val cli = Clingon()
+        val x: String by cli.option("-x").require()
+        val y: List<String> by cli.option("-y").collect()
+        val z: Int by cli.option("-z").map { it.toInt() }.default { -1 }
+    }
+
     @Test
     fun errors() {
         val cli = Clingon()
@@ -116,6 +125,16 @@ class ClingonTests {
 
         i shouldEqual listOf("a", "b", "c")
         o shouldEqual listOf("d", "e", "f")
+    }
+
+    @Test
+    fun `output generation`() {
+        val cli = Clingon("mycli")
+        val help by cli.flag("--help | -? | -h", help = "This is a simple help message.")
+        val v by cli.flag("-v", help = "This is a simple help message.")
+        val first by cli.positional("first", help = "This is the first arg")
+
+        println(cli.buildHelp())
     }
 }
 
